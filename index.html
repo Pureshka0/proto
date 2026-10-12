@@ -1,0 +1,1273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>ProtoESP</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0d0e12">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+:root{
+  --led:#ff2a3d; --bg:#0d0e12; --card:#16181f; --card2:#1e2129; --line:#2a2e3a;
+  --text:#e9ebf2; --mute:#8d93a5; --ok:#3ddc97; --warn:#ffb020;
+  --mono:ui-monospace,"SF Mono","Cascadia Mono","Roboto Mono",Consolas,monospace;
+  --lvl:0;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  padding-bottom:calc(72px + env(safe-area-inset-bottom));overflow-x:hidden}
+main{max-width:720px;margin:0 auto;padding:0 12px}
+h2{font-size:13px;font-weight:600;color:var(--mute);margin:20px 4px 8px}
+button,select,input{font:inherit;color:inherit}
+button{cursor:pointer}
+a{color:var(--led)}
+
+/* header */
+header{display:flex;align-items:center;flex-wrap:wrap;gap:6px;padding:12px 4px 8px}
+.logo{font-size:18px;font-weight:700;margin-right:auto}
+.logo b{color:var(--led)}
+.chip{font:600 11px var(--mono);padding:4px 8px;border-radius:99px;border:1px solid var(--line);color:var(--mute);white-space:nowrap}
+.chip.on{color:var(--ok);border-color:var(--ok)}
+.chip.hot{color:var(--led);border-color:var(--led)}
+.chip.bad{color:var(--warn);border-color:var(--warn)}
+.note{display:flex;gap:10px;align-items:center;border:1px solid var(--warn);border-radius:12px;padding:10px 12px;margin:0 0 10px;font-size:13px}
+.note span{flex:1}
+
+/* live visor */
+#stage{position:sticky;top:0;z-index:5;padding:6px 0 10px;background:var(--bg)}
+.visor{position:relative;border-radius:16px;padding:12px 10px 8px;background:#0a0b0f;border:1px solid var(--line)}
+#live{display:block;width:100%;height:auto}
+.visor.off #live{opacity:.25}
+#offmsg{position:absolute;inset:0;display:none;align-items:center;justify-content:center;font-weight:600;font-size:13px;color:var(--warn)}
+.visor.off #offmsg{display:flex}
+.under{display:flex;align-items:center;gap:10px;margin-top:8px}
+#now{font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.meter{flex:1;height:6px;border-radius:9px;background:#ffffff14;overflow:hidden;min-width:40px}
+.meter i{display:block;height:100%;width:calc(var(--lvl)*100%);background:var(--led);border-radius:9px;transition:width .06s linear}
+.ib{border:1px solid var(--line);background:var(--card2);border-radius:10px;padding:6px 10px;font-size:13px;font-weight:600;white-space:nowrap}
+
+/* cards & controls */
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:4px 14px;margin-bottom:12px}
+.row{display:flex;align-items:center;gap:12px;padding:10px 0;border-top:1px solid #ffffff0d;min-height:48px}
+.row:first-child{border-top:0}
+.row>label,.row>.l{flex:1;min-width:0}
+.row small,.game small,.hint{display:block;color:var(--mute);font-size:12px;line-height:1.35}
+.hint{padding:8px 0;margin:0}
+.row output{font:600 12px var(--mono);color:var(--mute);min-width:46px;text-align:right}
+input[type=range]{-webkit-appearance:none;appearance:none;width:46%;max-width:260px;height:26px;background:none;margin:0}
+input[type=range]::-webkit-slider-runnable-track{height:6px;border-radius:9px;background:#ffffff1f}
+input[type=range]::-moz-range-track{height:6px;border-radius:9px;background:#ffffff1f}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:20px;height:20px;margin-top:-7px;border-radius:50%;background:var(--led);border:0}
+input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;background:var(--led);border:0}
+.sw{position:relative;width:44px;height:26px;flex:none}
+.sw input{position:absolute;inset:0;opacity:0;margin:0;width:100%;height:100%;cursor:pointer;z-index:1}
+.sw span{position:absolute;inset:0;border-radius:99px;background:#ffffff1f;transition:.15s}
+.sw span:after{content:"";position:absolute;left:3px;top:3px;width:20px;height:20px;border-radius:50%;background:#c3c7d3;transition:.15s}
+.sw input:checked+span{background:var(--led)}
+.sw input:checked+span:after{left:21px;background:#fff}
+.sw input:focus-visible+span,input:focus-visible,select:focus-visible,button:focus-visible,summary:focus-visible,.face:focus-visible{outline:2px solid var(--led);outline-offset:2px}
+select,input[type=text],input[type=number]{background:var(--card2);border:1px solid var(--line);border-radius:10px;padding:8px 10px;max-width:56%;min-width:0}
+input[type=number]{width:74px}
+input[type=color]{width:46px;height:30px;padding:0;border:1px solid var(--line);border-radius:8px;background:none}
+.btn{border:1px solid var(--line);background:var(--card2);border-radius:10px;padding:9px 14px;font-weight:600;text-decoration:none;color:inherit}
+.btn.pri{background:var(--led);border-color:var(--led);color:#fff}
+.btn.danger{color:var(--warn)}
+.btns{display:flex;flex-wrap:wrap;gap:8px;padding:10px 0}
+.seg{display:flex;background:var(--card2);border:1px solid var(--line);border-radius:10px;padding:3px}
+.seg button{border:0;background:none;padding:6px 14px;border-radius:8px;font-weight:600;color:var(--mute)}
+.seg button.on{background:var(--led);color:#fff}
+summary{list-style:none;cursor:pointer;display:flex;align-items:center;padding:12px 0;font-weight:600}
+summary::-webkit-details-marker{display:none}
+summary:after{content:"";margin:0 4px 3px auto;width:7px;height:7px;border-right:2px solid var(--mute);border-bottom:2px solid var(--mute);transform:rotate(45deg)}
+details[open]>summary:after{transform:rotate(-135deg);margin-bottom:-3px}
+details.more{border-top:1px solid #ffffff0d}
+details.more>summary{color:var(--mute);font-weight:400;font-size:13px}
+
+/* faces */
+.cats{display:flex;gap:6px;overflow-x:auto;padding:2px 2px 10px;scrollbar-width:none}
+.cats::-webkit-scrollbar{display:none}
+.cats button{flex:none;border:1px solid var(--line);background:none;border-radius:99px;padding:6px 12px;font-size:13px;color:var(--mute)}
+.cats button.on{color:#fff;border-color:var(--led);background:var(--led)}
+#grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.face{position:relative;border:1px solid var(--line);background:var(--card);border-radius:12px;padding:10px 8px 6px;text-align:center;cursor:pointer;
+  -webkit-tap-highlight-color:transparent;user-select:none}
+.face canvas{display:block;width:100%;height:auto;image-rendering:pixelated}
+.face.on{border-color:var(--led);background:color-mix(in srgb,var(--led) 12%,var(--card))}
+.face .nm{display:block;font-size:13px;font-weight:600;padding:6px 20px 2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.face .fav,.face .more{position:absolute;bottom:2px;width:30px;height:30px;border:0;background:none;color:#ffffff40;font-size:15px;line-height:30px;padding:0}
+.face .fav{left:0}.face .more{right:0;font-weight:700}
+.face .fav.on{color:var(--led)}
+.face .tag{position:absolute;top:4px;right:6px;font:600 9px/1 var(--mono);color:var(--mute)}
+
+/* voice meter */
+#vu{position:relative;height:34px;border-radius:8px;background:#ffffff0d;overflow:hidden;margin:12px 0 4px}
+#vu .lv{position:absolute;inset:0 auto 0 0;background:var(--led);transition:width .06s linear}
+#vu .mk{position:absolute;top:0;bottom:0;width:2px}
+#vu .fl{background:var(--mute)}#vu .gt{background:var(--ok)}#vu .tp{background:var(--warn)}
+.legend{display:flex;gap:14px;font-size:12px;color:var(--mute);padding-bottom:8px;flex-wrap:wrap}
+.legend i{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:5px}
+#jaw{height:6px;border-radius:9px;background:#ffffff0d;overflow:hidden;margin-bottom:10px}
+#jaw i{display:block;height:100%;background:var(--text);border-radius:9px;transition:width .05s linear}
+
+/* tilt */
+.axes{display:grid;grid-template-columns:18px 1fr 48px;gap:6px 8px;align-items:center;padding:10px 0;font:600 12px var(--mono)}
+.axis{position:relative;height:8px;border-radius:9px;background:#ffffff14}
+.axis i{position:absolute;top:-3px;width:4px;height:14px;border-radius:2px;background:var(--led);left:50%;transition:left .1s}
+.cap{display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px solid #ffffff0d}
+.cap b{flex:none;width:64px;font-size:13px;color:var(--mute)}
+.cap span{flex:1;font:12px var(--mono)}
+
+/* panels, log */
+#panels{display:grid;gap:4px;padding:10px 0;max-width:420px;margin:auto}
+#panels button{aspect-ratio:1;border:1px solid var(--line);background:var(--card2);border-radius:6px;font:600 12px var(--mono);padding:0;position:relative}
+#panels button.sel{border-color:var(--led);background:color-mix(in srgb,var(--led) 25%,var(--card2))}
+#panels button small{position:absolute;right:2px;bottom:0;font-size:8px;color:var(--mute)}
+#log{font:11px/1.4 var(--mono);white-space:pre-wrap;word-break:break-word;max-height:260px;overflow:auto;background:#0006;border-radius:10px;padding:10px;margin:8px 0;color:#b9bfd0}
+
+/* tabs */
+nav{position:fixed;left:0;right:0;bottom:0;z-index:20;display:flex;justify-content:center;gap:4px;padding:6px 10px calc(6px + env(safe-area-inset-bottom));
+  background:var(--bg);border-top:1px solid var(--line)}
+nav button{flex:1;max-width:150px;min-width:0;border:0;background:none;border-radius:10px;padding:6px 4px;font-size:12px;font-weight:600;color:var(--mute)}
+nav svg{display:block;margin:0 auto 2px;width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+nav button.on{color:var(--led)}
+section{display:none}
+section.on{display:block}
+
+/* sheet, toast, start screen */
+#sheet{position:fixed;inset:0;z-index:40;background:#000a;display:none;align-items:flex-end;justify-content:center}
+#sheet.on{display:flex}
+#sheet div{width:100%;max-width:520px;background:var(--card);border:1px solid var(--line);border-radius:16px 16px 0 0;padding:8px 10px calc(14px + env(safe-area-inset-bottom))}
+#sheet h3{font-size:14px;margin:10px 8px;color:var(--led)}
+#sheet button{display:block;width:100%;text-align:left;border:0;background:none;padding:12px 10px;border-radius:10px;font-weight:600}
+#sheet button:hover{background:var(--card2)}
+#toast{position:fixed;left:50%;bottom:calc(86px + env(safe-area-inset-bottom));transform:translateX(-50%);z-index:50;background:var(--card2);border:1px solid var(--line);
+  border-radius:10px;padding:9px 14px;font-size:13px;font-weight:600;opacity:0;transition:opacity .2s;pointer-events:none;max-width:90vw;text-align:center}
+#toast.on{opacity:1}
+#boot{position:fixed;inset:0;z-index:60;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;color:var(--mute);font-size:13px;transition:opacity .25s}
+#boot.done{opacity:0;pointer-events:none}
+#boot b{font-size:22px;color:var(--text)}
+#boot b i{font-style:normal;color:var(--led)}
+footer{text-align:center;color:var(--mute);font-size:13px;padding:22px 0 10px}
+.rainbow-text{font-weight:bold;background-image:repeating-linear-gradient(45deg,violet,indigo,blue,green,yellow,orange,red,violet);background-size:800% 800%;-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;animation:rainbow 8s ease infinite}
+@keyframes rainbow{0%{background-position:0% 50%}50%{background-position:100% 25%}100%{background-position:0% 50%}}
+.game{display:flex;align-items:center;gap:10px;padding:12px 14px}
+.game .l{flex:1;min-width:0}
+.game b{display:block}
+.game.on{border-color:var(--led)}
+.hide{display:none!important}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div id="boot"><b>Proto<i>ESP</i></b><span id="bootmsg">Connecting...</span></div>
+
+<main>
+  <header>
+    <div class="logo">Proto<b>ESP</b></div>
+    <span class="chip hot hide" id="cBoop">BOOP</span>
+    <span class="chip hot hide" id="cTilt">TILT</span>
+    <span class="chip on hide" id="cRemote">REMOTE</span>
+    <span class="chip hot hide" id="cGame">GAME</span>
+    <span class="chip hide" id="cPower"></span>
+    <span class="chip" id="cLink">OFFLINE</span>
+    <button class="ib" id="lang" title="Language">RU</button>
+  </header>
+  <div class="note hide" id="note"><span></span><button class="ib" id="noteMore">Details</button><button class="ib" id="noteX" aria-label="Close">&times;</button></div>
+
+  <div id="stage">
+    <div class="visor off" id="visor">
+      <canvas id="live" width="800" height="240" aria-label="Live view of the visor"></canvas>
+      <div id="offmsg">No link - retrying</div>
+    </div>
+    <div class="under">
+      <span id="now">-</span>
+      <div class="meter" title="Microphone"><i></i></div>
+      <button class="ib" id="bBlink">Blink</button>
+    </div>
+  </div>
+
+  <!-- ===================== FACES ===================== -->
+  <section id="t-faces" class="on">
+    <div class="card">
+      <div class="row"><label for="bVisor">Brightness</label><input type="range" id="bVisor" data-k="bVisor" min="0" max="15"><output></output></div>
+    </div>
+    <div class="cats" id="cats"></div>
+    <div id="grid"></div>
+    <h2>Behaviour</h2>
+    <div class="card">
+      <div class="row"><label>Blink<small>Eyes blink by themselves</small></label><span class="sw"><input type="checkbox" data-k="blinkEna"><span></span></span></div>
+      <div class="row"><label>Float and look around<small>Eyes drift gently and glance at things</small></label><span class="sw"><input type="checkbox" data-k="lifeEna"><span></span></span></div>
+      <div class="row"><label for="trans">Face change</label><select id="trans" data-k="trans">
+        <option value="6">Liquid</option><option value="1">Screen fold</option><option value="2">Dissolve</option>
+        <option value="3">Wipe</option><option value="4">Glitch</option><option value="5">Surprise me</option><option value="0">Instant</option></select></div>
+      <details class="more"><summary>More settings</summary>
+        <div class="row"><label for="glow">Brightness play<small>Panels breathe, pulse and light up with your voice</small></label><input type="range" id="glow" data-k="glow" min="0" max="4"><output></output></div>
+        <div class="row"><label for="text">Scrolling text<small>For the face called "text"</small></label><input type="text" id="text" data-k="text" maxlength="60" autocomplete="off"></div>
+        <div class="row"><label>Blink every<small>Seconds, shortest to longest pause</small></label>
+          <input type="number" data-k="blinkMin" data-scale="1000" min="0.5" max="60" step="0.5" aria-label="Shortest pause between blinks"><span>-</span>
+          <input type="number" data-k="blinkMax" data-scale="1000" min="0.5" max="120" step="0.5" aria-label="Longest pause between blinks"></div>
+      </details>
+    </div>
+  </section>
+
+  <!-- ===================== VOICE ===================== -->
+  <section id="t-voice">
+    <h2>Microphone</h2>
+    <div class="card">
+      <div id="vu"><div class="lv"></div><div class="mk fl"></div><div class="mk gt"></div><div class="mk tp"></div></div>
+      <div class="legend"><span><i style="background:var(--mute)"></i><span>noise</span></span><span><i style="background:var(--ok)"></i><span>mouth reacts</span></span><span><i style="background:var(--warn)"></i><span>full</span></span><span id="micInfo" style="margin-left:auto"></span></div>
+      <div id="jaw"><i></i></div>
+      <div class="row"><label>Talk<small>Mouth follows your voice</small></label><span class="sw"><input type="checkbox" data-k="speechEna"><span></span></span></div>
+      <div class="row"><span class="l">Levels<small>Auto learns the noise around you and how loud you talk</small></span>
+        <div class="seg" id="spMode"><button data-v="1">Auto</button><button data-v="0">Manual</button></div></div>
+      <div class="row auto"><label for="spGate">Noise gate<small>Higher = calmer mouth</small></label><input type="range" id="spGate" data-k="spGate" min="2" max="30" data-unit=" dB"><output></output></div>
+      <div class="row manual"><label for="spThr">Opens at</label><input type="range" id="spThr" data-k="spThr" min="0" max="80" data-unit=" dB"><output></output></div>
+      <div class="row manual"><label for="spRange">Fully open<small>This much louder</small></label><input type="range" id="spRange" data-k="spRange" min="3" max="40" data-unit=" dB"><output></output></div>
+      <div class="btns">
+        <button class="btn auto" data-do="recal">Learn noise again</button>
+        <button class="btn manual" id="bCalib">Measure silence</button>
+      </div>
+      <details class="more"><summary>Fine tuning</summary>
+        <div class="row"><label for="spOpen">Voice layers<small>How thick the mouth gets when you are loud</small></label><input type="range" id="spOpen" data-k="spOpen" min="1" max="3"><output></output></div>
+        <div class="row"><label for="spAtk">Reacts in</label><input type="range" id="spAtk" data-k="spAtk" min="5" max="150" step="5" data-unit=" ms"><output></output></div>
+        <div class="row"><label for="spRel">Fades in<small>Higher = calmer, lower = snappier</small></label><input type="range" id="spRel" data-k="spRel" min="20" max="500" step="10" data-unit=" ms"><output></output></div>
+      </details>
+    </div>
+  </section>
+
+  <!-- ===================== BOOP ===================== -->
+  <section id="t-boop">
+    <h2>Boop</h2>
+    <div class="card">
+      <div class="row"><label>React to boops<small id="boopInfo"></small></label><span class="sw"><input type="checkbox" data-k="boopEna"><span></span></span></div>
+      <div class="row"><label for="boopFn">A boop on the snout</label><select id="boopFn" data-k="boopFn">
+        <option value="0">shows the boop face</option><option value="1">switches to the next favourite</option>
+        <option value="2">spins the slot machine</option><option value="3">rolls the dice</option><option value="4">plays the jump game</option>
+        <option value="5">starts the reaction test</option><option value="6">asks the oracle</option></select></div>
+      <div class="row"><label for="aBoop">Boop face</label><select id="aBoop" data-k="aBoop" class="animsel"></select></div>
+      <div class="row" id="boopThr"><label for="boopThresh">Boop distance<small><span>Sensor reads</span> <b id="prox">-</b></small></label><input type="range" id="boopThresh" data-k="boopThresh" min="1" max="250"><output></output></div>
+      <div class="btns"><button class="btn pri" id="bBoop">Boop!</button><button class="btn" data-do="gstop">Stop the game</button></div>
+      <p class="hint" id="gameStat"></p>
+    </div>
+    <h2>Mini games</h2>
+    <div id="games"></div>
+  </section>
+
+  <!-- ===================== SYSTEM ===================== -->
+  <section id="t-sys">
+    <h2>Helmet</h2>
+    <div class="card">
+      <div class="row"><label for="fanDuty">Fan</label><input type="range" id="fanDuty" data-k="fanDuty" min="0" max="255"><output></output></div>
+      <div class="row"><label>Boot sequence<small>Self test and loading bar at power on</small></label><span class="sw"><input type="checkbox" data-k="bootEna"><span></span></span></div>
+      <div class="row"><label for="visColor">LED colour<small id="colInfo">Colour of this page</small></label><input type="color" id="visColor" data-k="visColor"></div>
+      <div class="row ledx"><label for="bEar">Ears / blush brightness</label><input type="range" id="bEar" data-k="bEar" min="0" max="255"><output></output></div>
+      <div class="row ledx"><label for="rbSpeed">Rainbow speed</label><input type="range" id="rbSpeed" data-k="rbSpeed" min="1" max="200"><output></output></div>
+      <div class="row ledx"><label for="rbWidth">Rainbow width</label><input type="range" id="rbWidth" data-k="rbWidth" min="1" max="32"><output></output></div>
+      <div class="row"><label>Inside display (OLED)</label><select data-k="bOled" aria-label="OLED brightness"><option value="0">Dim</option><option value="1">Medium</option><option value="2">Bright</option></select><span class="sw"><input type="checkbox" data-k="oledEna"><span></span></span></div>
+      <div class="row"><label>Bluetooth<small>Remote and the Bluetooth page. Takes effect after a restart</small></label><span class="sw"><input type="checkbox" data-k="bleEna"><span></span></span></div>
+      <div class="btns">
+        <button class="btn" data-do="boot">Play boot sequence</button>
+        <button class="btn ws" data-do="rgb">Visor RGB mode</button>
+      </div>
+    </div>
+
+    <details class="card"><summary>Head tilt</summary>
+      <div class="row"><label>React to tilting<small id="imuInfo"></small></label><span class="sw"><input type="checkbox" data-k="tiltEna"><span></span></span></div>
+      <div class="axes">
+        <span>X</span><div class="axis"><i id="ax"></i></div><span id="axv">-</span>
+        <span>Y</span><div class="axis"><i id="ay"></i></div><span id="ayv">-</span>
+        <span>Z</span><div class="axis"><i id="az"></i></div><span id="azv">-</span>
+      </div>
+      <p class="hint">Hold your head in each pose and press its button.</p>
+      <div class="cap"><b>Straight</b><span id="pNeutral"></span><button class="btn" data-pose="neutral">Set</button></div>
+      <div class="cap"><b>Sideways</b><span id="pTilt"></span><button class="btn" data-pose="tilt">Set</button></div>
+      <div class="cap"><b>Up</b><span id="pUp"></span><button class="btn" data-pose="up">Set</button></div>
+      <div class="row"><label for="tiltTol">Tolerance</label><input type="range" id="tiltTol" data-k="tiltTol" min="0.02" max="0.5" step="0.01"><output></output></div>
+      <div class="row"><label for="aTilt">Face when tilted sideways</label><select id="aTilt" data-k="aTilt" class="animsel"></select></div>
+      <div class="row"><label for="aUp">Face when looking up</label><select id="aUp" data-k="aUp" class="animsel"></select></div>
+    </details>
+
+    <details class="card"><summary>Panels</summary>
+      <p class="hint">Turn on the check and look at the helmet: every panel shows its number, upright, with a dot in its top left corner. If one is mirrored or turned, select it here and fix it.</p>
+      <div class="row"><label>Panel check<small>Numbers on the visor</small></label><span class="sw"><input type="checkbox" id="testNum"><span></span></span></div>
+      <div id="panels"></div>
+      <div class="btns">
+        <button class="btn" data-ori="1">Mirror</button><button class="btn" data-ori="2">Flip</button><button class="btn" data-ori="4">Turn</button>
+        <button class="btn" id="oriAll">Select all</button>
+        <button class="btn" id="bLamp">All LEDs on</button>
+      </div>
+    </details>
+
+    <details class="card"><summary>WiFi</summary>
+      <div class="row"><label for="wifiName">Name</label><input type="text" id="wifiName" maxlength="31" autocomplete="off"></div>
+      <div class="row"><label for="wifiPass">Password<small>At least 8 characters</small></label><input type="text" id="wifiPass" maxlength="63" autocomplete="off"></div>
+      <div class="btns"><button class="btn pri" id="bWifi">Save and restart</button></div>
+    </details>
+
+    <details class="card"><summary>Files and updates</summary>
+      <div class="btns">
+        <a class="btn" href="/animator.html">Open Animator</a>
+        <button class="btn" id="bUp">Upload faces (.json / .zip)</button>
+        <button class="btn" id="bZip">Download all faces</button>
+        <button class="btn" id="bCfgDown">Download settings</button>
+        <button class="btn" id="bCfgUp">Load settings</button>
+        <a class="btn" href="/update">Firmware update</a>
+      </div>
+      <input type="file" id="fAnim" accept=".zip,.json" class="hide">
+      <input type="file" id="fCfg" accept=".json" class="hide">
+    </details>
+
+    <h2>Status</h2>
+    <div class="card">
+      <p class="hint" id="stat">-</p>
+      <p class="hint" id="why"></p>
+      <div class="btns">
+        <button class="btn" id="bLog">Show log</button>
+        <button class="btn" id="bCrash">Restart history</button>
+        <button class="btn" data-do="reboot">Restart</button>
+        <button class="btn danger" id="bDef">Factory settings</button>
+      </div>
+      <div id="log" class="hide"></div>
+    </div>
+  </section>
+
+  <footer>ProtoESP <span id="fw"></span> &middot; Coded by <a target="_blank" rel="noopener" href="https://github.com/ncplyn" class="rainbow-text">@NCPlyn</a></footer>
+</main>
+
+<nav>
+  <button data-t="faces" class="on"><svg viewBox="0 0 24 24"><path d="M3 9c2-4 6-4 8 0M13 9c2-4 6-4 8 0M5 15l3 3 4-4 4 4 3-3"/></svg><span>Faces</span></button>
+  <button data-t="voice"><svg viewBox="0 0 24 24"><path d="M4 10v4M8 6v12M12 3v18M16 7v10M20 10v4"/></svg><span>Voice</span></button>
+  <button data-t="boop"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M5 5a10 10 0 000 14M19 5a10 10 0 010 14"/></svg><span>Boop</span></button>
+  <button data-t="sys"><svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></svg><span>System</span></button>
+</nav>
+
+<div id="sheet"><div></div></div>
+<div id="toast"></div>
+
+<script>
+// Bluetooth link for the control page (tools/make_bleapp.py puts this in front of it).
+// The page keeps asking for "/api/..." and opening a web socket as it does on the helmet;
+// here both are carried over Web Bluetooth instead. The helmet's side is src/blelink.cpp,
+// where the protocol is described.
+"use strict";
+(() => {
+const SVC = "50450001-9d4e-4b6f-8e6a-70726f746f31", RX = "50450002-9d4e-4b6f-8e6a-70726f746f31", TX = "50450003-9d4e-4b6f-8e6a-70726f746f31";
+const K = {HELLO: 1, AUTH: 2, GET: 3, PUT: 4, FEED: 5, RES: 16, FRAME: 17, TEXT: 18};
+const START = 1, END = 2, CHUNK = 244, enc = new TextEncoder(), dec = new TextDecoder(); // 244 bytes fit into one packet on any phone of the last years
+const HELMET = /^\/(api\/|anims\/|log$|crash\.txt$|deletefile$|savefile$)/; // what belongs to the helmet, the rest is the internet
+const say = (s, ...a) => typeof T === "function" ? T(s, ...a) : s;
+const RU_MORE = {
+  "Connect over Bluetooth": "Подключиться по Bluetooth",
+  "Switch the helmet on, tap the button and pick it from the list.": "Включи шлем, нажми кнопку и выбери его в списке.",
+  "This browser cannot use Bluetooth. Open the page in Chrome on Android or on a computer.": "Этот браузер не умеет работать с Bluetooth. Открой страницу в Chrome на Android или на компьютере.",
+  "Password of the helmet (the same as for its WiFi)": "Пароль шлема (тот же, что у его WiFi)",
+  "Wrong password.": "Неверный пароль.",
+  "Could not connect. Is the helmet switched on and close by?": "Не удалось подключиться. Шлем включён и рядом?",
+  "The helmet does not answer over Bluetooth. It needs firmware 2.3 or newer, with Bluetooth switched on in its settings.": "Шлем не отвечает по Bluetooth. Нужна прошивка 2.3 или новее и включённый Bluetooth в его настройках.",
+  "Tap to connect again": "Нажми, чтобы подключиться снова"
+};
+
+let dev = null, rx = null, up = false, linking = null, part = null, nextId = 0, chain = Promise.resolve(), firstOk;
+let everUp = false, retry = false; // retry: bring a lost link back without asking
+const firstLink = new Promise(ok => firstOk = ok), waiting = new Map(), socks = new Set();
+
+/* ---------- messages: [kind << 2 | START | END][id and length, in the first packet][bytes] ---------- */
+function send(kind, id, body = new Uint8Array(0)) {
+  const to = rx;
+  for (let pos = 0, first = true; first || pos < body.length; first = false) {
+    const head = first ? 4 : 1, n = Math.min(CHUNK - head, body.length - pos), p = new Uint8Array(head + n);
+    p[0] = kind << 2 | (first ? START : 0) | (pos + n >= body.length ? END : 0);
+    if (first) p.set([id, body.length & 255, body.length >> 8], 1);
+    p.set(body.subarray(pos, pos + n), head);
+    pos += n;
+    chain = chain.then(() => to.writeValueWithResponse ? to.writeValueWithResponse(p) : to.writeValue(p)); // one write at a time
+  }
+  const sent = chain;
+  chain = chain.catch(() => {});
+  return sent;
+}
+function onPacket(e) {
+  const v = new Uint8Array(e.target.value.buffer, e.target.value.byteOffset, e.target.value.byteLength);
+  if (!v.length) return;
+  const kind = v[0] >> 2, start = v[0] & START;
+  if (start && v.length < 4 || !start && (!part || part.kind !== kind)) return;
+  if (start) part = {kind, id: v[1], want: v[2] | v[3] << 8, chunks: [], size: 0};
+  const bytes = v.slice(start ? 4 : 1);
+  part.chunks.push(bytes);
+  part.size += bytes.length;
+  if (!(v[0] & END)) return;
+  const body = new Uint8Array(part.size), m = part;
+  part = null;
+  if (m.size !== m.want) return; // a piece is missing: whoever asked will time out and may ask again
+  m.chunks.reduce((at, c) => (body.set(c, at), at + c.length), 0);
+  if (m.kind === K.FRAME) socks.forEach(s => s.onmessage && s.onmessage({data: body.buffer}));
+  else if (m.kind === K.TEXT) socks.forEach(s => s.onmessage && s.onmessage({data: dec.decode(body)}));
+  else if (waiting.has(m.id)) {
+    const w = waiting.get(m.id);
+    waiting.delete(m.id);
+    clearTimeout(w.timer);
+    w.ok(body);
+  }
+}
+function ask(kind, body, ms = 15000) {
+  const id = nextId = nextId % 255 + 1;
+  return new Promise((ok, no) => {
+    waiting.set(id, {ok, no, timer: setTimeout(() => { waiting.delete(id); no(new Error("no answer")); }, ms)});
+    send(kind, id, body).catch(e => { if (waiting.delete(id)) no(e); });
+  });
+}
+
+/* ---------- connecting ---------- */
+async function login(helmet) {
+  const nonce = Uint8Array.from(helmet.nonce.match(/../g), h => parseInt(h, 16));
+  for (let tries = 0; tries < 3; tries++) {
+    let pw = null;
+    try { pw = localStorage.getItem("blepw"); } catch (e) {}
+    if (!pw) pw = prompt(say("Password of the helmet (the same as for its WiFi)"));
+    if (!pw) throw new Error("cancel");
+    const key = await crypto.subtle.importKey("raw", enc.encode(pw), {name: "HMAC", hash: "SHA-256"}, false, ["sign"]);
+    const ok = (await ask(K.AUTH, new Uint8Array(await crypto.subtle.sign("HMAC", key, nonce))))[0] === 1;
+    try { ok ? localStorage.setItem("blepw", pw) : localStorage.removeItem("blepw"); } catch (e) {}
+    if (ok) return;
+  }
+  throw new Error("password");
+}
+function link(pick) {
+  if (up) return Promise.resolve();
+  if (linking) return linking;
+  let step = "pick";
+  linking = (async () => {
+    if (!dev || pick) {
+      const d = await navigator.bluetooth.requestDevice({filters: [{services: [SVC]}, {services: [0xffe0]}], optionalServices: [SVC]});
+      if (d !== dev) d.addEventListener("gattserverdisconnected", lost);
+      dev = d;
+    }
+    step = "connect";
+    status("Connecting...");
+    try {
+      const gatt = await dev.gatt.connect();
+      step = "talk";
+      const svc = await gatt.getPrimaryService(SVC), tx = await svc.getCharacteristic(TX);
+      rx = await svc.getCharacteristic(RX);
+      chain = Promise.resolve();
+      part = null;
+      tx.removeEventListener("characteristicvaluechanged", onPacket);
+      tx.addEventListener("characteristicvaluechanged", onPacket);
+      await tx.startNotifications();
+      const helmet = JSON.parse(dec.decode(await ask(K.HELLO, undefined, 6000)));
+      step = "password";
+      await login(helmet);
+    } catch (e) {
+      if (dev.gatt.connected) dev.gatt.disconnect();
+      throw e;
+    }
+    up = everUp = retry = true;
+    firstOk();
+    socks.forEach(s => s._open());
+    if (document.hidden) send(K.FEED, 0, new Uint8Array([0])).catch(() => {});
+  })();
+  linking.then(() => "", e => {
+    if (step === "password") retry = false; // do not ask for the password again and again
+    return step === "pick" || e.message === "cancel" ? "" : step === "password" && e.message === "password" ? "Wrong password." :
+           step === "connect" ? "Could not connect. Is the helmet switched on and close by?" :
+           "The helmet does not answer over Bluetooth. It needs firmware 2.3 or newer, with Bluetooth switched on in its settings.";
+  }).then(s => { linking = null; status(s); });
+  return linking;
+}
+function lost() {
+  if (dev && dev.gatt.connected) return; // an older connection reporting late
+  up = false;
+  waiting.forEach(w => { clearTimeout(w.timer); w.no(new Error("link lost")); });
+  waiting.clear();
+  [...socks].forEach(s => s.close());
+}
+
+/* ---------- what the page uses: fetch() and WebSocket ---------- */
+const netFetch = window.fetch.bind(window);
+window.fetch = async (url, opt = {}) => {
+  const u = new URL(String(url), location.href);
+  if (u.origin !== location.origin || !HELMET.test(u.pathname)) return netFetch(url, opt);
+  if (!up) await (everUp ? Promise.reject(new Error("no link")) : firstLink);
+  let r;
+  if (opt.method === "POST") { // an animation to store
+    const bytes = enc.encode(opt.body.get("file") + "\0" + opt.body.get("content"));
+    if (bytes.length > 60000) return new Response("Error opening file for writing! (too big for Bluetooth)", {status: 413});
+    r = await ask(K.PUT, bytes, 40000);
+  } else r = await ask(K.GET, enc.encode(u.pathname + u.search));
+  return new Response(r.slice(2), {status: r[0] | r[1] << 8});
+};
+window.WebSocket = class {
+  constructor() {
+    this.readyState = 0;
+    socks.add(this);
+    if (up) setTimeout(() => this._open());
+    else if (retry) link().catch(() => this.close()); // the page keeps trying, so a lost link comes back by itself
+  }
+  _open() {
+    if (this.readyState !== 0) return;
+    this.readyState = 1;
+    if (this.onopen) this.onopen({});
+  }
+  send() {}
+  close() {
+    if (this.readyState === 3) return;
+    this.readyState = 3;
+    socks.delete(this);
+    setTimeout(() => this.onclose && this.onclose({}));
+  }
+};
+document.addEventListener("visibilitychange", () => { if (up) send(K.FEED, 0, new Uint8Array([document.hidden ? 0 : 1])).catch(() => {}); }); // no picture for a page nobody looks at
+
+/* ---------- the start screen ---------- */
+let note = "", button, message;
+function status(s) {
+  note = s;
+  paint();
+}
+function paint() {
+  if (!button) return;
+  const can = !!navigator.bluetooth;
+  button.textContent = say("Connect over Bluetooth");
+  button.classList.toggle("hide", !can);
+  button.disabled = !!linking;
+  message.textContent = !can ? say("This browser cannot use Bluetooth. Open the page in Chrome on Android or on a computer.")
+                              : say(note || "Switch the helmet on, tap the button and pick it from the list.");
+  const off = document.querySelector("#offmsg");
+  if (off && everUp) off.textContent = say(note || "No link - retrying").replace(/\.$/, "") + ". " + say("Tap to connect again");
+}
+addEventListener("DOMContentLoaded", () => {
+  if (typeof RU === "object") Object.assign(RU, RU_MORE);
+  const boot = document.querySelector("#boot");
+  message = document.querySelector("#bootmsg");
+  message.style.cssText = "max-width:300px;text-align:center";
+  button = document.createElement("button");
+  button.className = "btn pri";
+  button.onclick = () => link(true).catch(() => {});
+  boot.appendChild(button);
+  document.querySelector("#visor").addEventListener("click", () => { if (everUp && !up) link(true).catch(() => {}); });
+  document.querySelector("#lang").addEventListener("click", paint);
+  // things that need the helmet's own WiFi
+  for (const el of [document.querySelector("#wifiName").closest("details"), document.querySelector("[data-k=bleEna]").closest(".row"), document.querySelector("#cRemote"),
+                    ...document.querySelectorAll('a[href="/animator.html"], a[href="/update"]')]) el.style.display = "none";
+  paint();
+  if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+});
+})();
+</script>
+<script>
+"use strict";
+const $ = (s, r) => (r || document).querySelector(s), $$ = (s, r) => [...(r || document).querySelectorAll(s)];
+
+/* ---------- language: English is what the page is written in, Russian comes from this table ---------- */
+const RU = {
+  "Language": "Язык", "Connecting...": "Подключение...", "Details": "Подробнее", "Close": "Закрыть",
+  "Live view of the visor": "Визор сейчас", "No link - retrying": "Нет связи - пробую снова", "Microphone": "Микрофон", "Blink": "Моргнуть",
+  "Faces": "Лица", "Voice": "Голос", "Boop": "Буп", "System": "Система",
+  "Brightness": "Яркость", "Behaviour": "Поведение", "Eyes blink by themselves": "Глаза моргают сами",
+  "Float and look around": "Плавать и осматриваться", "Eyes drift gently and glance at things": "Глаза плавно двигаются и поглядывают по сторонам",
+  "Face change": "Смена лица", "Liquid": "Перетекание", "Screen fold": "Сворачивание экрана", "Dissolve": "Растворение", "Wipe": "Шторка",
+  "Glitch": "Глитч", "Surprise me": "Случайно", "Instant": "Мгновенно", "More settings": "Ещё настройки",
+  "Brightness play": "Игра яркости", "Panels breathe, pulse and light up with your voice": "Панели дышат, пульсируют и вспыхивают от голоса",
+  "Scrolling text": "Бегущая строка", "For the face called \"text\"": "Для лица «text» (только латиница)",
+  "Blink every": "Моргать каждые", "Seconds, shortest to longest pause": "Секунды: от самой короткой до самой длинной паузы",
+  "Shortest pause between blinks": "Самая короткая пауза между морганиями", "Longest pause between blinks": "Самая длинная пауза между морганиями",
+  "noise": "шум", "mouth reacts": "рот реагирует", "full": "максимум", "Talk": "Речь", "Mouth follows your voice": "Рот двигается от голоса",
+  "Levels": "Уровни", "Auto learns the noise around you and how loud you talk": "Авто само изучает шум вокруг и громкость твоего голоса",
+  "Auto": "Авто", "Manual": "Вручную", "Noise gate": "Порог шума", "Higher = calmer mouth": "Выше = рот спокойнее",
+  "Opens at": "Реагирует с", "Fully open": "Максимум", "This much louder": "Настолько громче",
+  "Learn noise again": "Изучить шум заново", "Measure silence": "Измерить тишину", "Fine tuning": "Тонкая настройка",
+  "Voice layers": "Слои голоса", "How thick the mouth gets when you are loud": "Насколько толстеет рот, когда ты говоришь громко",
+  "Reacts in": "Реакция", "Fades in": "Затухание", "Higher = calmer, lower = snappier": "Больше = спокойнее, меньше = резче",
+  "React to boops": "Реагировать на буп", "A boop on the snout": "Буп по носу", "shows the boop face": "показывает лицо бупа",
+  "switches to the next favourite": "включает следующее избранное", "spins the slot machine": "крутит слот-машину", "rolls the dice": "бросает кубики",
+  "plays the jump game": "запускает игру с прыжками", "starts the reaction test": "запускает тест реакции", "asks the oracle": "спрашивает оракула",
+  "Boop face": "Лицо бупа", "Boop distance": "Дистанция бупа", "Sensor reads": "Датчик видит", "Boop!": "Буп!", "Stop the game": "Остановить игру",
+  "Mini games": "Мини-игры", "Play": "Играть",
+  "Helmet": "Шлем", "Fan": "Вентилятор", "Boot sequence": "Анимация запуска", "Self test and loading bar at power on": "Самопроверка и полоса загрузки при включении",
+  "LED colour": "Цвет светодиодов", "Colour of this page": "Цвет этой страницы", "Default colour of the visor": "Основной цвет визора",
+  "Ears / blush brightness": "Яркость ушей / румянца", "Rainbow speed": "Скорость радуги", "Rainbow width": "Ширина радуги",
+  "Inside display (OLED)": "Экран внутри (OLED)", "OLED brightness": "Яркость OLED", "Dim": "Тускло", "Medium": "Средне", "Bright": "Ярко",
+  "Remote and the Bluetooth page. Takes effect after a restart": "Пульт и страница по Bluetooth. Применится после перезапуска",
+  "Play boot sequence": "Показать запуск", "Visor RGB mode": "RGB-режим визора",
+  "Head tilt": "Наклон головы", "React to tilting": "Реагировать на наклон", "Hold your head in each pose and press its button.": "Держи голову в нужной позе и нажми её кнопку.",
+  "Straight": "Прямо", "Sideways": "Вбок", "Up": "Вверх", "Set": "Запомнить", "Tolerance": "Допуск",
+  "Face when tilted sideways": "Лицо при наклоне вбок", "Face when looking up": "Лицо при взгляде вверх",
+  "Panels": "Панели", "Turn on the check and look at the helmet: every panel shows its number, upright, with a dot in its top left corner. If one is mirrored or turned, select it here and fix it.":
+    "Включи проверку и посмотри на шлем: каждая панель показывает свой номер, ровно, с точкой в левом верхнем углу. Если какая-то отражена или повёрнута - выбери её здесь и исправь.",
+  "Panel check": "Проверка панелей", "Numbers on the visor": "Номера на визоре", "Mirror": "Отразить", "Flip": "Перевернуть", "Turn": "Повернуть",
+  "Select all": "Выбрать все", "All LEDs on": "Зажечь все",
+  "Name": "Имя", "Password": "Пароль", "At least 8 characters": "Не меньше 8 символов", "Save and restart": "Сохранить и перезапустить",
+  "Files and updates": "Файлы и обновления", "Open Animator": "Открыть Animator", "Upload faces (.json / .zip)": "Загрузить лица (.json / .zip)",
+  "Download all faces": "Скачать все лица", "Download settings": "Скачать настройки", "Load settings": "Загрузить настройки", "Firmware update": "Обновление прошивки",
+  "Status": "Состояние", "Show log": "Показать журнал", "Restart history": "История перезапусков", "Restart": "Перезапустить", "Factory settings": "Заводские настройки",
+  /* things the script says */
+  "ONLINE": "НА СВЯЗИ", "OFFLINE": "НЕТ СВЯЗИ", "BOOP": "БУП", "TILT": "НАКЛОН", "REMOTE": "ПУЛЬТ", "GAME": "ИГРА",
+  "Helmet did not answer": "Шлем не ответил", "Not saved - no link": "Не сохранено - нет связи",
+  "All": "Все", "★ Favourites": "★ Избранное", "Scenes": "Сцены", "My faces": "Мои лица", "emotion": "эмоции", "cute": "милые", "silly": "смешные", "robot": "робот", "system": "служебные",
+  "Favourite": "В избранное", "More": "Ещё",
+  "Nothing here yet. Star a face to make it a favourite - the button on the helmet steps through favourites.": "Здесь пока пусто. Отметь лицо звёздочкой - кнопка на шлеме листает избранные.",
+  "animator preview": "предпросмотр из Animator",
+  "Show on the visor": "Показать на визоре", "Remove from favourites": "Убрать из избранного", "Add to favourites": "Добавить в избранное",
+  "Use when booped": "Показывать при бупе", "Use when tilted sideways": "Показывать при наклоне вбок", "Use when looking up": "Показывать при взгляде вверх",
+  "Edit in Animator": "Изменить в Animator", "Download file": "Скачать файл", "Delete": "Удалить",
+  "{0} = boop face": "{0} = лицо бупа", "{0} = tilt face": "{0} = лицо наклона", "{0} = look up face": "{0} = лицо взгляда вверх",
+  "Delete {0}? This cannot be undone.": "Удалить {0}? Отменить будет нельзя.", "Deleted {0}": "{0} удалено",
+  "mic not available": "микрофон недоступен", "live": "поток", "polled": "опрос", "kHz": "кГц",
+  "Motion sensor found": "Датчик движения найден", "Motion sensor not found (turn this on to look for it)": "Датчик движения не найден (включи, чтобы поискать)",
+  "Playing: {0}": "Идёт игра: {0}", "Last game - {0}": "Прошлая игра - {0}", "Nothing played yet.": "Пока ни одной игры.",
+  "Up {0} · {1} fps · {2} kB free · pages open: {3}": "Работает {0} · {1} к/с · свободно {2} кБ · открыто страниц: {3}",
+  " s": " с", " min": " мин", " h ": " ч ", " dB": " дБ", " ms": " мс",
+  "No motion sensor - turn tilting on first": "Нет датчика движения - сначала включи реакцию на наклон", "Pose stored": "Поза сохранена",
+  "Select a panel first": "Сначала выбери панель", "Panel {0}": "Панель {0}", "eye": "глаз", "mouth": "рот", "nose": "нос",
+  "{0} - look at the visor": "{0} - смотри на визор", "Restart the helmet?": "Перезапустить шлем?",
+  "Listening for the noise level": "Слушаю уровень шума", "Booting...": "Запуск...", "Restarting...": "Перезапуск...", "Game stopped": "Игра остановлена", "OK": "Готово",
+  "Stay quiet for 3 seconds...": "Помолчи 3 секунды...",
+  "Reset ALL settings (including WiFi name and password)?": "Сбросить ВСЕ настройки (включая имя и пароль WiFi)?", "Reset - reconnect to ProtoWiFi": "Сброшено - подключись к ProtoWiFi",
+  "Password needs at least 8 characters": "В пароле должно быть не меньше 8 символов",
+  "The helmet restarts as \"{0}\". You will have to reconnect.": "Шлем перезапустится с именем «{0}». Нужно будет подключиться заново.",
+  "(empty)": "(пусто)", "Packing...": "Упаковываю...", "Could not pack the faces": "Не получилось упаковать лица",
+  "Faces with the same name will be replaced. Continue?": "Лица с такими же именами будут заменены. Продолжить?",
+  "{0} stored": "Сохранено: {0}", ", {0} failed": ", с ошибкой: {0}", "Settings loaded": "Настройки загружены", "That is not a ProtoESP config file": "Это не файл настроек ProtoESP",
+  "Sensor: {0}": "Датчик: {0}", "No boop sensor set in hwconfig.h": "Датчик бупа не указан в hwconfig.h",
+  "KY-032 infrared": "инфракрасный KY-032", "touch sensor": "сенсорный", "VL53L1X laser range finder": "лазерный дальномер VL53L1X",
+  "found": "найден", "not found": "не найден",
+  "Could not read the faces": "Не удалось прочитать лица", "No answer from the helmet": "Шлем не отвечает",
+  "Slot machine": "Слот-машина", "Eyes and noses are the reels. Boop again to stop a reel early - all the same is the jackpot.": "Глаза и носы - барабаны. Буп останавливает барабан раньше; все одинаковые - джекпот.",
+  "Dice": "Кубики", "Two dice, one in each eye. Boop again to roll again.": "Два кубика, по одному в каждом глазу. Ещё буп - новый бросок.",
+  "Jump": "Прыжки", "Blocks come running along the mouth. Boop to jump. It gets faster.": "По рту бегут блоки. Буп - прыжок. Скорость растёт.",
+  "Reaction test": "Тест реакции", "Wait until the eyes light up, then boop as fast as you can.": "Жди, пока вспыхнут глаза, и сразу делай буп.",
+  "Oracle": "Оракул", "Ask a yes or no question out loud, boop, read the answer.": "Задай вслух вопрос «да или нет», сделай буп и читай ответ.",
+  "Last start: {0}": "Последний запуск: {0}", "The helmet restarted by itself: {0}": "Шлем перезапустился сам: {0}",
+  "Safe mode: the helmet crashed several times in a row, so only this page is running. See System > Status, then restart it.": "Безопасный режим: шлем упал несколько раз подряд, поэтому работает только эта страница. Загляни в Система > Состояние и перезапусти его.",
+  "No unexpected restarts on record.": "Неожиданных перезапусков не записано.",
+  "power on": "включение питания", "restart": "обычный перезапуск", "crash": "сбой программы", "interrupt watchdog": "сторожевой таймер (прерывания)",
+  "task watchdog": "сторожевой таймер (задача)", "watchdog": "сторожевой таймер", "brownout (supply voltage dropped)": "просадка питания",
+  "deep sleep": "сон", "USB": "USB", "reset": "сброс"
+};
+const GAME_RU = [["slots", "слоты"], ["dice", "кубики"], ["runner", "прыжки"], ["reaction", "реакция"], ["oracle", "оракул"], ["JACKPOT", "ДЖЕКПОТ"], ["no luck", "не повезло"],
+  ["win", "выигрыш"], ["coins", "монет"], ["best", "рекорд"], ["too soon", "слишком рано"], ["asleep", "проспал"], [" ms", " мс"]];
+let lang = "en";
+try { lang = localStorage.getItem("lang") || ((navigator.language || "").toLowerCase().startsWith("ru") ? "ru" : "en"); } catch (e) {}
+function T(s, ...a) {
+  let r = lang === "ru" && RU[s] || s;
+  a.forEach((v, i) => r = r.replace("{" + i + "}", v));
+  return r;
+}
+// the words that are already in the page: remember every one that has a translation
+const words = [];
+(function walk(el) {
+  for (const c of el.childNodes) {
+    if (c.nodeType === 3) {
+      const s = c.nodeValue.trim();
+      if (RU[s]) words.push([c, null, c.nodeValue, s]);
+    } else if (c.nodeType === 1 && c.tagName !== "SCRIPT") {
+      for (const a of ["title", "aria-label"]) if (RU[c.getAttribute(a)]) words.push([c, a, c.getAttribute(a), c.getAttribute(a)]);
+      walk(c);
+    }
+  }
+})(document.body);
+
+const BOOP = ["", "KY-032 infrared", "touch sensor", "APDS9960", "VL53L1X laser range finder"];
+const GAMES = [null,
+  ["Slot machine", "Eyes and noses are the reels. Boop again to stop a reel early - all the same is the jackpot."],
+  ["Dice", "Two dice, one in each eye. Boop again to roll again."],
+  ["Jump", "Blocks come running along the mouth. Boop to jump. It gets faster."],
+  ["Reaction test", "Wait until the eyes light up, then boop as fast as you can."],
+  ["Oracle", "Ask a yes or no question out loud, boop, read the answer."]];
+let info = {n: 14, cells: [], roles: "", bmax: 15}, cfg = {}, faces = [], cur = "", cat = "all";
+const data = {};          // face name -> parsed animation
+let lastStat = {}, online = false, lost = false;
+
+/* ---------- small helpers ---------- */
+const get = (url) => fetch(url, {cache: "no-store"}).then(r => { if (!r.ok) throw new Error(url + " " + r.status); return r; });
+const nice = (n) => n.replace(/\.json$/, "");
+let toastT;
+function toast(msg) {
+  const t = $("#toast");
+  t.textContent = msg;
+  t.classList.add("on");
+  clearTimeout(toastT);
+  toastT = setTimeout(() => t.classList.remove("on"), 2200);
+}
+function act(a, v) { return get("/api/do?a=" + a + (v === undefined ? "" : "&v=" + v)).then(() => true, () => { toast(T("Helmet did not answer")); return false; }); }
+
+/* ---------- settings: every input with data-k is bound to one config key ---------- */
+let pending = {}, sendT;
+function setCfg(k, v, now) {
+  cfg[k] = v;
+  pending[k] = v;
+  clearTimeout(sendT);
+  sendT = setTimeout(flush, now ? 0 : 140);
+  syncInputs(k);
+}
+function flush() {
+  const q = Object.entries(pending).map(([k, v]) => encodeURIComponent(k) + "=" + encodeURIComponent(v)).join("&");
+  pending = {};
+  if (q) get("/api/set?" + q).catch(() => toast(T("Not saved - no link")));
+}
+function showVal(el) {
+  const o = el.parentElement.querySelector("output");
+  if (o) o.textContent = el.value + (el.dataset.unit ? T(el.dataset.unit) : "");
+}
+function syncInputs(only) {
+  $$("[data-k]").forEach(el => {
+    const k = el.dataset.k;
+    if ((only && k !== only) || cfg[k] === undefined || el === document.activeElement && el.type !== "checkbox") return;
+    if (el.type === "checkbox") el.checked = !!cfg[k];
+    else el.value = el.dataset.scale ? cfg[k] / el.dataset.scale : cfg[k];
+    showVal(el);
+  });
+  if (!only || only === "spAuto") {
+    $$("#spMode button").forEach(b => b.classList.toggle("on", (b.dataset.v === "1") === !!cfg.spAuto));
+    $$(".auto").forEach(e => e.classList.toggle("hide", !cfg.spAuto));
+    $$(".manual").forEach(e => e.classList.toggle("hide", !!cfg.spAuto));
+  }
+  if (!only || only === "visColor") setLed(cfg.visColor);
+  if (!only) {
+    $("#wifiName").value = cfg.wifiName || "";
+    $("#wifiPass").value = cfg.wifiPass || "";
+    showPoses();
+    drawPanels();
+  }
+}
+document.addEventListener("input", e => {
+  const el = e.target, k = el.dataset && el.dataset.k;
+  if (!k) return;
+  let v = el.type === "checkbox" ? el.checked : el.value;
+  if (el.dataset.scale) v = Math.round(v * el.dataset.scale);
+  if (el.type === "range") v = +v;
+  showVal(el);
+  setCfg(k, v);
+});
+$$("#spMode button").forEach(b => b.onclick = () => setCfg("spAuto", b.dataset.v === "1", true));
+
+function setLed(c) {
+  if (!/^#[0-9a-f]{6}$/i.test(c || "")) return;
+  // a pure dark colour would make the page unreadable: keep the hue, lift the brightness
+  let [r, g, b] = [1, 3, 5].map(i => parseInt(c.substr(i, 2), 16));
+  if (r + g + b < 24) [r, g, b] = [255, 42, 61];
+  const m = Math.max(r, g, b), f = 255 / m;
+  c = "#" + [r, g, b].map(x => Math.round(x * f).toString(16).padStart(2, "0")).join("");
+  if (c === ledColor()) return;
+  document.documentElement.style.setProperty("--led", c);
+  sprite = null;
+  thumbsDirty();
+}
+
+/* ---------- drawing the visor ---------- */
+const live = $("#live"), lctx = live.getContext("2d");
+let sprite = null, panelsBg = null, pitch = 10, cols = 10, rows = 3, lastFb = null, lastLv = null;
+function ledColor() { return getComputedStyle(document.documentElement).getPropertyValue("--led").trim() || "#ff2a3d"; }
+function layout() {
+  cols = Math.max(...info.cells.map(c => c[0])) + 1;
+  rows = Math.max(...info.cells.map(c => c[1])) + 1;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  pitch = Math.max(4, Math.floor(live.clientWidth * dpr / (cols * 8)));
+  live.width = cols * 8 * pitch;
+  live.height = rows * 8 * pitch;
+  sprite = panelsBg = null;
+}
+function makeSprite() {
+  const s = document.createElement("canvas"), n = pitch * 3;
+  s.width = s.height = n;
+  const c = s.getContext("2d"), g = c.createRadialGradient(n / 2, n / 2, 0, n / 2, n / 2, n / 2), col = ledColor();
+  g.addColorStop(0, "#fff");
+  g.addColorStop(.14, col);
+  g.addColorStop(.3, col + "aa");
+  g.addColorStop(.55, col + "2a");
+  g.addColorStop(1, col + "00");
+  c.fillStyle = g;
+  c.fillRect(0, 0, n, n);
+  return s;
+}
+function makePanels() { // the dark panels with their unlit LEDs, drawn once
+  const s = document.createElement("canvas"), c = s.getContext("2d"), r = pitch * .22;
+  s.width = live.width;
+  s.height = live.height;
+  info.cells.forEach(([cx, cy]) => {
+    const x0 = cx * 8 * pitch, y0 = cy * 8 * pitch;
+    c.fillStyle = "#ffffff07";
+    c.fillRect(x0 + 1, y0 + 1, 8 * pitch - 2, 8 * pitch - 2);
+    c.fillStyle = "#ffffff12";
+    for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) {
+      c.beginPath();
+      c.arc(x0 + (x + .5) * pitch, y0 + (y + .5) * pitch, r, 0, 7);
+      c.fill();
+    }
+  });
+  return s;
+}
+// fb: Uint8Array, one byte per row of every matrix, bit = column
+function drawLive(fb, lv) {
+  lastFb = fb;
+  lastLv = lv;
+  if (!sprite) sprite = makeSprite();
+  if (!panelsBg) panelsBg = makePanels();
+  lctx.clearRect(0, 0, live.width, live.height);
+  lctx.drawImage(panelsBg, 0, 0);
+  if (!fb) return;
+  lctx.globalCompositeOperation = "lighter";
+  info.cells.forEach(([cx, cy], m) => {
+    // panels the helmet runs brighter or dimmer than the set brightness show it here too
+    lctx.globalAlpha = lv ? Math.max(.3, Math.min(1, .8 + .12 * (lv[m] - (+cfg.bVisor || 0)))) : 1;
+    for (let y = 0; y < 8; y++) {
+      const b = fb[m * 8 + y];
+      if (!b) continue;
+      for (let x = 0; x < 8; x++) if (b >> x & 1)
+        lctx.drawImage(sprite, (cx * 8 + x - 1) * pitch, (cy * 8 + y - 1) * pitch);
+    }
+  });
+  lctx.globalAlpha = 1;
+  lctx.globalCompositeOperation = "source-over";
+}
+// animation frame ("leds": 16 hex digits per matrix) -> same byte layout as the live feed
+function frameBytes(fr) {
+  const out = new Uint8Array(info.n * 8);
+  (fr.leds || []).slice(0, info.n).forEach((hex, m) => {
+    hex = hex.padStart(16, "0");
+    for (let y = 0; y < 8; y++) out[m * 8 + y] = parseInt(hex.substr(14 - y * 2, 2), 16);
+  });
+  return out;
+}
+function drawThumb(cv, fb) {
+  const p = 2, c = cv.getContext("2d");
+  if (cv.width !== cols * 8 * p) { cv.width = cols * 8 * p; cv.height = rows * 8 * p; }
+  c.clearRect(0, 0, cv.width, cv.height);
+  c.fillStyle = "#ffffff0b";
+  info.cells.forEach(([cx, cy]) => c.fillRect(cx * 8 * p, cy * 8 * p, 8 * p, 8 * p));
+  c.fillStyle = ledColor();
+  info.cells.forEach(([cx, cy], m) => {
+    for (let y = 0; y < 8; y++) {
+      const b = fb[m * 8 + y];
+      for (let x = 0; b && x < 8; x++) if (b >> x & 1) c.fillRect((cx * 8 + x) * p, (cy * 8 + y) * p, p, p);
+    }
+  });
+}
+
+/* ---------- faces ---------- */
+const CATS = ["all", "fav", "emotion", "cute", "silly", "robot", "scene", "system", "custom"];
+const CATNAME = {all: "All", fav: "★ Favourites", scene: "Scenes", custom: "My faces"};
+function favs() { return (cfg.favs || "").split(";").filter(Boolean); }
+function catOf(n) { return data[n] ? ((data[n].meta || {}).cat || "custom") : ""; }
+function buildCats() {
+  const used = new Set(faces.map(catOf));
+  $("#cats").innerHTML = CATS.filter(c => c === "all" || c === "fav" || used.has(c))
+    .map(c => `<button data-c="${c}" class="${c === cat ? "on" : ""}">${T(CATNAME[c] || c)}</button>`).join("");
+}
+$("#cats").onclick = e => {
+  const b = e.target.closest("button");
+  if (!b) return;
+  cat = b.dataset.c;
+  buildCats();
+  buildGrid();
+};
+function buildGrid() {
+  const f = favs(), g = $("#grid");
+  const list = faces.filter(n => cat === "all" || (cat === "fav" ? f.includes(nice(n)) : catOf(n) === cat));
+  g.innerHTML = list.map(n => `<div class="face${n === cur ? " on" : ""}" data-n="${n}" role="button" tabindex="0">
+    <canvas width="160" height="48"></canvas><span class="nm">${nice(n)}</span>
+    <button class="fav${f.includes(nice(n)) ? " on" : ""}" aria-label="${T("Favourite")}">★</button><button class="more" aria-label="${T("More")}">⋮</button>
+    <span class="tag"></span></div>`).join("") ||
+    (cat === "fav" ? `<p class="hint">${T("Nothing here yet. Star a face to make it a favourite - the button on the helmet steps through favourites.")}</p>` : "");
+  $$(".face", g).forEach(paintCard);
+}
+function paintCard(el) {
+  const d = data[el.dataset.n];
+  if (!d) return;
+  const fr = d.visor.frames;
+  drawThumb($("canvas", el), frameBytes(fr[0]));
+  $(".tag", el).textContent = fr.length > 1 ? fr.length + "F" : "";
+}
+function thumbsDirty() { if (info.cells.length) $$(".face").forEach(paintCard); }
+function fillSelects() {
+  $$(".animsel").forEach(s => {
+    s.innerHTML = faces.map(n => `<option value="${n}">${nice(n)}</option>`).join("");
+    if (cfg[s.dataset.k]) s.value = cfg[s.dataset.k];
+  });
+}
+// load the face files a few at a time, the ESP is a small web server
+async function loadFaces() {
+  const j = await (await get("/api/faces")).json();
+  faces = j.list;
+  setCur(j.cur);
+  fillSelects();
+  buildGrid();
+  const todo = faces.filter(n => !data[n]);
+  let done = 0;
+  const worker = async () => {
+    for (let n; (n = todo.shift());) {
+      try { data[n] = await (await get("/anims/" + encodeURIComponent(n))).json(); } catch (e) { data[n] = null; }
+      const el = $(`.face[data-n="${CSS.escape(n)}"]`);
+      if (el) paintCard(el);
+      if (++done % 8 === 0) buildCats();
+    }
+  };
+  await Promise.all([worker(), worker(), worker()]);
+  buildCats();
+  if (cat !== "all") buildGrid();
+}
+function setCur(n) {
+  cur = n;
+  $("#now").textContent = n === "POSTAnimLoad" ? T("animator preview") : nice(n || "-");
+  $$(".face").forEach(el => el.classList.toggle("on", el.dataset.n === n));
+}
+let playT;
+function playCard(el) { // run the frames of the hovered / active card
+  clearTimeout(playT);
+  const d = el && data[el.dataset.n];
+  if (!d || d.visor.frames.length < 2) return;
+  let i = 0;
+  const step = () => {
+    if (!el.isConnected) return;
+    const fr = d.visor.frames[i = (i + 1) % d.visor.frames.length];
+    drawThumb($("canvas", el), frameBytes(fr));
+    playT = setTimeout(step, Math.max(40, fr.timespan));
+  };
+  step();
+}
+function showFace(n) { return get("/api/face?name=" + encodeURIComponent(n)).catch(() => toast(T("Helmet did not answer"))); }
+$("#grid").addEventListener("pointerover", e => { const el = e.target.closest(".face"); if (el && e.pointerType === "mouse") playCard(el); });
+$("#grid").addEventListener("click", e => {
+  const el = e.target.closest(".face");
+  if (!el) return;
+  const n = el.dataset.n;
+  if (e.target.classList.contains("fav")) return toggleFav(n);
+  if (e.target.classList.contains("more")) return openSheet(n);
+  setCur(n);
+  playCard(el);
+  showFace(n);
+});
+$("#grid").addEventListener("keydown", e => { if (e.key === "Enter" && e.target.classList.contains("face")) e.target.click(); });
+function toggleFav(n) {
+  let f = favs();
+  f = f.includes(nice(n)) ? f.filter(x => x !== nice(n)) : [...f, nice(n)];
+  setCfg("favs", f.join(";"), true);
+  buildGrid();
+}
+function openSheet(n) {
+  const s = $("#sheet"), box = $("div", s);
+  const items = [
+    ["Show on the visor", () => showFace(n)],
+    [favs().includes(nice(n)) ? "Remove from favourites" : "Add to favourites", () => toggleFav(n)],
+    ["Use when booped", () => { setCfg("aBoop", n, true); toast(T("{0} = boop face", nice(n))); }],
+    ["Use when tilted sideways", () => { setCfg("aTilt", n, true); toast(T("{0} = tilt face", nice(n))); }],
+    ["Use when looking up", () => { setCfg("aUp", n, true); toast(T("{0} = look up face", nice(n))); }],
+    ["Edit in Animator", () => location.href = "/animator.html?load=" + encodeURIComponent(n)],
+    ["Download file", () => { const a = document.createElement("a"); a.href = "/anims/" + encodeURIComponent(n); a.download = n; a.click(); }],
+    ["Delete", async () => {
+      if (!confirm(T("Delete {0}? This cannot be undone.", nice(n)))) return;
+      await get("/deletefile?file=" + encodeURIComponent(n)).catch(() => {});
+      delete data[n];
+      toast(T("Deleted {0}", nice(n)));
+    }],
+  ];
+  box.innerHTML = `<h3>${nice(n)}</h3>` + items.map((it, i) => `<button data-i="${i}">${T(it[0])}</button>`).join("");
+  box.onclick = e => { const b = e.target.closest("button"); if (b) { s.classList.remove("on"); items[b.dataset.i][1](); } };
+  s.classList.add("on");
+}
+$("#sheet").onclick = e => { if (e.target.id === "sheet") e.target.classList.remove("on"); };
+
+/* ---------- live link ---------- */
+const db = b => b / 2.5 - 10, DBMAX = 70;
+let sock, retry = 500;
+function connect() {
+  sock = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/ws");
+  sock.binaryType = "arraybuffer";
+  sock.onopen = () => { retry = 500; setOnline(true); };
+  sock.onclose = () => { setOnline(false); setTimeout(connect, retry); retry = Math.min(retry * 1.6, 5000); };
+  sock.onmessage = e => typeof e.data === "string" ? onEvent(JSON.parse(e.data)) : onFrame(new Uint8Array(e.data));
+}
+function setOnline(on) {
+  const back = on && lost;
+  online = on;
+  lost = !on;
+  $("#visor").classList.toggle("off", !on);
+  const c = $("#cLink");
+  c.textContent = T(on ? "ONLINE" : "OFFLINE");
+  c.className = "chip " + (on ? "on" : "bad");
+  if (back) { loadInfo().catch(() => {}); loadCfg(); loadFaces().catch(() => {}); } // it may have restarted meanwhile
+}
+function onFrame(d) {
+  if (d[0] !== 1) return;
+  const fl = d[1], open = d[2] / 255, pct = v => Math.max(0, Math.min(100, db(v) / DBMAX * 100)) + "%";
+  document.documentElement.style.setProperty("--lvl", open.toFixed(3));
+  $("#cBoop").classList.toggle("hide", !(fl & 2));
+  $("#cTilt").classList.toggle("hide", !(fl & 4));
+  $("#cRemote").classList.toggle("hide", !(fl & 16));
+  if ($("#t-voice").classList.contains("on")) {
+    $("#vu .lv").style.width = pct(d[3]);
+    $("#vu .fl").style.left = pct(d[4]);
+    $("#vu .gt").style.left = pct(d[5]);
+    $("#vu .tp").style.left = pct(d[6]);
+    $("#jaw i").style.width = open * 100 + "%";
+  }
+  const n = d[7];
+  drawLive(d.subarray(8, 8 + n * 8), d.length >= 8 + n * 9 ? d.subarray(8 + n * 8, 8 + n * 9) : null);
+}
+const fmtUp = s => s < 60 ? s + T(" s") : s < 3600 ? Math.floor(s / 60) + T(" min") : Math.floor(s / 3600) + T(" h ") + Math.floor(s % 3600 / 60) + T(" min");
+function gameResult(s) { // the helmet reports results in English
+  if (lang === "ru") GAME_RU.forEach(([a, b]) => s = s.replace(a, b));
+  return s;
+}
+function onEvent(m) {
+  if (m.t === "anim") setCur(m.name);
+  else if (m.t === "cfg") loadCfg();
+  else if (m.t === "list") loadFaces().catch(() => {});
+  else if (m.t === "s") showStatus(m);
+}
+function showStatus(m) {
+  lastStat = m;
+  if (m.anim !== cur) setCur(m.anim);
+  const p = $("#cPower");
+  p.classList.toggle("hide", m.v === undefined);
+  if (m.v !== undefined) p.textContent = m.v.toFixed(1) + "V " + m.a.toFixed(1) + "A";
+  $("#micInfo").textContent = !m.mic ? T("mic not available") : T(m.dma ? "live" : "polled") + " " + Math.round(m.fs / 100) / 10 + " " + T("kHz");
+  $("#imuInfo").textContent = T(m.imu ? "Motion sensor found" : "Motion sensor not found (turn this on to look for it)");
+  ["x", "y", "z"].forEach((a, i) => {
+    $("#a" + a).style.left = Math.max(0, Math.min(100, 50 + m.acc[i] * 50)) + "%";
+    $("#a" + a + "v").textContent = m.imu ? m.acc[i].toFixed(2) : "-";
+  });
+  $("#prox").textContent = m.prox < 0 ? "-" : m.prox;
+  showBoopInfo();
+  $("#cGame").classList.toggle("hide", !m.g);
+  $("#gameStat").textContent = m.g ? T("Playing: {0}", T(GAMES[m.g][0])) : m.gs ? T("Last game - {0}", gameResult(m.gs)) : T("Nothing played yet.");
+  $$(".game").forEach(e => e.classList.toggle("on", +e.dataset.g === m.g));
+  $("#testNum").checked = m.test === 1;
+  $("#bLamp").classList.toggle("pri", m.test === 2);
+  $("#stat").textContent = T("Up {0} · {1} fps · {2} kB free · pages open: {3}", fmtUp(m.up), m.fps, Math.round(m.heap / 1024), m.cl);
+}
+async function loadCfg() {
+  try { cfg = await (await get("/api/cfg")).json(); } catch (e) { return; }
+  syncInputs();
+  $$(".animsel").forEach(s => { if (cfg[s.dataset.k]) s.value = cfg[s.dataset.k]; });
+}
+
+/* ---------- what the helmet is, and how its last start went ---------- */
+async function loadInfo() {
+  info = await (await get("/api/info")).json();
+  layout();
+  drawLive(lastFb, lastLv);
+  $("#bVisor").max = info.bmax;
+  $("#fw").textContent = "v" + info.fw;
+  $$(".ledx").forEach(e => e.classList.toggle("hide", !(info.ears || info.blush || info.visor === "WS2812")));
+  $$(".ws").forEach(e => e.classList.toggle("hide", info.visor !== "WS2812"));
+  $("#boopThr").classList.toggle("hide", info.boop < 3);
+  showInfo();
+}
+let noteSeen = "";
+try { noteSeen = localStorage.getItem("seen") || ""; } catch (e) {}
+function showBoopInfo() { // sensors on the I2C bus can be missing: say so
+  const found = info.boop < 3 || lastStat.tof === undefined || !cfg.boopEna ? "" : " - " + T(lastStat.tof ? "found" : "not found");
+  $("#boopInfo").textContent = info.boop ? T("Sensor: {0}", T(BOOP[info.boop])) + found : T("No boop sensor set in hwconfig.h");
+}
+function showInfo() {
+  $("#colInfo").textContent = T(info.visor === "WS2812" ? "Default colour of the visor" : "Colour of this page");
+  showBoopInfo();
+  // the report itself comes from the helmet, in English
+  $("#why").textContent = !info.why ? "" : T("Last start: {0}", !info.report ? T(info.why) : lang === "ru" ? T(info.why) + " - " + info.report : info.report);
+  const n = $("#note"), text = info.safe ? T("Safe mode: the helmet crashed several times in a row, so only this page is running. See System > Status, then restart it.")
+                                         : info.report && info.report !== noteSeen ? T("The helmet restarted by itself: {0}", T(info.why)) : "";
+  n.classList.toggle("hide", !text);
+  $("span", n).textContent = text;
+  $("#noteX").classList.toggle("hide", !!info.safe);
+}
+$("#noteX").onclick = () => {
+  noteSeen = info.report || "";
+  try { localStorage.setItem("seen", noteSeen); } catch (e) {}
+  showInfo();
+};
+$("#noteMore").onclick = () => { tab("sys"); $("#bCrash").click(); };
+
+/* ---------- tilt poses ---------- */
+const POSE = {neutral: ["neutralX", "neutralY", "neutralZ", "#pNeutral"], tilt: ["tiltX", "tiltY", "tiltZ", "#pTilt"], up: ["upX", "upY", "upZ", "#pUp"]};
+function showPoses() { Object.values(POSE).forEach(p => $(p[3]).textContent = p.slice(0, 3).map(k => (+cfg[k] || 0).toFixed(2)).join("  ")); }
+$$("[data-pose]").forEach(b => b.onclick = () => {
+  if (!lastStat.imu) return toast(T("No motion sensor - turn tilting on first"));
+  POSE[b.dataset.pose].slice(0, 3).forEach((k, i) => setCfg(k, lastStat.acc[i], true));
+  showPoses();
+  toast(T("Pose stored"));
+});
+
+/* ---------- panels ---------- */
+let selPanels = new Set();
+function ori() { return (cfg.panelRot || "").padEnd(info.n, "0").slice(0, info.n).split("").map(Number); }
+function drawPanels() {
+  const p = $("#panels"), o = ori();
+  if (!info.cells.length) return;
+  p.style.gridTemplateColumns = `repeat(${cols},1fr)`;
+  p.innerHTML = "";
+  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+    const m = info.cells.findIndex(x => x[0] === c && x[1] === r);
+    if (m < 0) { p.appendChild(document.createElement("span")); continue; }
+    const b = document.createElement("button");
+    b.innerHTML = m + (o[m] ? `<small>${["", "M", "F", "MF", "T", "TM", "TF", "TMF"][o[m]]}</small>` : "");
+    b.title = T("Panel {0}", m) + " (" + T({E: "eye", M: "mouth", N: "nose"}[info.roles[m]] || "") + ")";
+    b.className = selPanels.has(m) ? "sel" : "";
+    b.onclick = () => { selPanels.has(m) ? selPanels.delete(m) : selPanels.add(m); drawPanels(); };
+    p.appendChild(b);
+  }
+}
+$$("[data-ori]").forEach(b => b.onclick = () => {
+  if (!selPanels.size) return toast(T("Select a panel first"));
+  const o = ori();
+  selPanels.forEach(m => o[m] ^= +b.dataset.ori);
+  setCfg("panelRot", o.join(""), true);
+  drawPanels();
+});
+$("#oriAll").onclick = () => { selPanels = selPanels.size === info.n ? new Set() : new Set(info.cells.map((_, i) => i)); drawPanels(); };
+$("#testNum").onchange = e => act("test", e.target.checked ? 1 : 0);
+$("#bLamp").onclick = () => act("test", lastStat.test === 2 ? 0 : 2);
+
+/* ---------- boops and games ---------- */
+function buildGames() {
+  $("#games").innerHTML = GAMES.map((g, i) => !g ? "" : `<div class="card game${lastStat.g === i ? " on" : ""}" data-g="${i}"><div class="l"><b>${T(g[0])}</b><small>${T(g[1])}</small></div>
+    <button class="btn" data-play="${i}">${T("Play")}</button></div>`).join("");
+}
+$("#games").onclick = e => {
+  const b = e.target.closest("[data-play]");
+  if (b) act("game", b.dataset.play).then(ok => ok && toast(T("{0} - look at the visor", T(GAMES[b.dataset.play][0]))));
+};
+$("#bBoop").onclick = () => act("boop");
+
+/* ---------- buttons ---------- */
+$("#bBlink").onclick = () => act("blink");
+$$("[data-do]").forEach(b => b.onclick = () => {
+  const a = b.dataset.do;
+  if (a === "reboot" && !confirm(T("Restart the helmet?"))) return;
+  act(a).then(ok => ok && toast(T({recal: "Listening for the noise level", boot: "Booting...", reboot: "Restarting...", gstop: "Game stopped"}[a] || "OK")));
+});
+$("#bCalib").onclick = () => act("calib").then(ok => ok && toast(T("Stay quiet for 3 seconds...")));
+$("#bDef").onclick = () => { if (confirm(T("Reset ALL settings (including WiFi name and password)?"))) act("defaults").then(ok => ok && toast(T("Reset - reconnect to ProtoWiFi"))); };
+$("#bWifi").onclick = async () => {
+  const n = $("#wifiName").value.trim(), p = $("#wifiPass").value;
+  if (!n || p.length < 8) return toast(T("Password needs at least 8 characters"));
+  if (!confirm(T("The helmet restarts as \"{0}\". You will have to reconnect.", n))) return;
+  await get(`/api/set?wifiName=${encodeURIComponent(n)}&wifiPass=${encodeURIComponent(p)}&save=1`);
+  setTimeout(() => act("reboot"), 400);
+};
+function showLog(text) {
+  const l = $("#log");
+  l.classList.remove("hide");
+  l.textContent = text;
+  l.scrollTop = l.scrollHeight;
+}
+$("#bLog").onclick = async () => showLog((await (await get("/log")).text()).split("\n").slice(-120).join("\n") || T("(empty)"));
+$("#bCrash").onclick = async () => showLog(await get("/crash.txt").then(r => r.text(), () => "") || T("No unexpected restarts on record."));
+function tab(t) {
+  $$("nav button").forEach(x => x.classList.toggle("on", x.dataset.t === t));
+  $$("section").forEach(s => s.classList.toggle("on", s.id === "t-" + t));
+  window.scrollTo({top: 0});
+}
+$$("nav button").forEach(b => b.onclick = () => tab(b.dataset.t));
+
+/* ---------- files ---------- */
+const jszip = () => window.JSZip ? Promise.resolve() : new Promise((ok, no) => {
+  const s = document.createElement("script");
+  s.src = "jszip.min.js";
+  s.onload = ok;
+  s.onerror = no;
+  document.head.appendChild(s);
+});
+function saveBlob(blob, name) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+}
+$("#bZip").onclick = async () => {
+  toast(T("Packing..."));
+  try {
+    await jszip();
+    const zip = new JSZip();
+    for (const n of faces) zip.file(n, await (await get("/anims/" + encodeURIComponent(n))).text());
+    saveBlob(await zip.generateAsync({type: "blob"}), "anims.zip");
+  } catch (e) { toast(T("Could not pack the faces")); }
+};
+async function storeFace(name, text) {
+  if (!text.includes("frames")) throw new Error("not an animation");
+  const fd = new FormData();
+  name = name.replace(/^.*\//, "");
+  fd.append("file", nice(name));
+  fd.append("content", text);
+  delete data[name]; // read it again afterwards: its picture may have changed
+  const r = await (await fetch("/savefile", {method: "POST", body: fd})).text();
+  if (r.includes("Error opening file") || r.includes("No valid parameters")) throw new Error(r);
+}
+$("#bUp").onclick = () => $("#fAnim").click();
+$("#fAnim").onchange = async e => {
+  const f = e.target.files[0];
+  e.target.value = "";
+  if (!f || !confirm(T("Faces with the same name will be replaced. Continue?"))) return;
+  let ok = 0, bad = 0;
+  try {
+    if (f.name.endsWith(".json")) { await storeFace(f.name, await f.text()); ok++; }
+    else {
+      await jszip();
+      const zip = await JSZip.loadAsync(await f.arrayBuffer());
+      for (const z of Object.values(zip.files).filter(z => z.name.endsWith(".json"))) {
+        try { await storeFace(z.name, await z.async("text")); ok++; } catch (err) { bad++; }
+      }
+    }
+  } catch (err) { bad++; }
+  toast(T("{0} stored", ok) + (bad ? T(", {0} failed", bad) : ""));
+};
+$("#bCfgDown").onclick = async () => saveBlob(new Blob([await (await get("/api/cfg")).text()], {type: "application/json"}), "config.json");
+$("#bCfgUp").onclick = () => $("#fCfg").click();
+$("#fCfg").onchange = async e => {
+  const f = e.target.files[0];
+  e.target.value = "";
+  if (!f) return;
+  try {
+    const j = JSON.parse(await f.text());
+    if (j.wifiName === undefined) throw 0;
+    const q = Object.entries(j).map(([k, v]) => encodeURIComponent(k) + "=" + encodeURIComponent(v)).join("&");
+    await get("/api/set?" + q + "&save=1");
+    toast(T("Settings loaded"));
+  } catch (err) { toast(T("That is not a ProtoESP config file")); }
+};
+
+/* ---------- language switch ---------- */
+function applyLang() {
+  document.documentElement.lang = lang;
+  words.forEach(([n, a, raw, s]) => { const v = raw.replace(s, T(s)); if (a) n.setAttribute(a, v); else n.nodeValue = v; });
+  $("#lang").textContent = lang === "ru" ? "EN" : "RU";
+  $("#cLink").textContent = T(online ? "ONLINE" : "OFFLINE");
+  buildCats();
+  buildGrid();
+  buildGames();
+  setCur(cur);
+  $$("[data-k]").forEach(showVal);
+  if (info.fw) showInfo();
+  if (lastStat.t) showStatus(lastStat);
+  drawPanels();
+}
+$("#lang").onclick = () => {
+  lang = lang === "ru" ? "en" : "ru";
+  try { localStorage.setItem("lang", lang); } catch (e) {}
+  applyLang();
+};
+applyLang();
+
+/* ---------- start ---------- */
+(async function start() {
+  const msg = s => $("#bootmsg").textContent = T(s);
+  try {
+    await loadInfo();
+    await loadCfg();
+    loadFaces().catch(() => toast(T("Could not read the faces")));
+    connect();
+  } catch (e) {
+    msg("No answer from the helmet");
+    setTimeout(start, 2500);
+    return;
+  }
+  $("#boot").classList.add("done");
+})();
+addEventListener("resize", () => { if (info.cells.length) { layout(); drawLive(lastFb, lastLv); } });
+</script>
+</body>
+</html>
